@@ -35,5 +35,4 @@ jobs:
           git push
 
       - name: Spustit novy deploy na Vercelu
-        if: ${{ secrets.VERCEL_DEPLOY_HOOK != '' }}
         run: curl -X POST "${{ secrets.VERCEL_DEPLOY_HOOK }}"
