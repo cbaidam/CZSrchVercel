@@ -1,0 +1,39 @@
+name: Denni indexace
+
+on:
+  schedule:
+    - cron: "0 3 * * *"   # kazdy den ve 3:00 UTC
+  workflow_dispatch:        # jde spustit i rucne z GitHub webu
+
+permissions:
+  contents: write
+
+jobs:
+  index:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repa
+        uses: actions/checkout@v4
+
+      - name: Nastavit Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalovat zavislosti
+        run: pip install -r scripts/requirements.txt
+
+      - name: Spustit crawler
+        run: python scripts/indexuj.py
+
+      - name: Commitnout novy index
+        run: |
+          git config user.name "czechia-search-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add api/pages.jsonl
+          git diff --cached --quiet || git commit -m "Denni aktualizace indexu"
+          git push
+
+      - name: Spustit novy deploy na Vercelu
+        if: ${{ secrets.VERCEL_DEPLOY_HOOK != '' }}
+        run: curl -X POST "${{ secrets.VERCEL_DEPLOY_HOOK }}"
