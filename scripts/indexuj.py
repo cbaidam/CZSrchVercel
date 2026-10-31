@@ -7,6 +7,7 @@ Ten pak cte vyhledavac v api/main.py.
 import json
 import re
 import time
+import unicodedata
 from pathlib import Path
 from urllib.parse import unquote, urljoin, urlparse, urlunparse
 
@@ -32,21 +33,35 @@ HEADERS = {"User-Agent": "CzechiaSearchBot/1.0"}
 POVOLENE_DOMENY = {urlparse(u).netloc for u in SEED_URLS}
 
 # Kousky URL, ktere znamenaji "neni to clanek, je to admin/meta stranka"
-# (editace, historie, specialni stranky, prihlaseni, kategorie...)
+# (editace, historie, presmerovani...) - kontroluji se jako substring v URL.
 VYLOUCENE_VZORY = [
     "action=edit", "action=history", "action=info", "redlink=1",
     "oldid=", "UploadWizard", "DownloadAsPdf", "useparsoid=",
     "/w/index.php",
-    "Special:", "Speciální:", "Speciáln%C3%AD:",
-    "Help:", "Nápověda:", "N%C3%A1pov%C4%9Bda:",
-    "Talk:", "Diskuse:",
-    "Category:", "Kategorie:",
-    "Portal:", "Portál:", "Port%C3%A1l:",
-    "File:", "Soubor:",
-    "Template:", "Šablona:",
-    "Module:", "Modul:",
-    "MediaWiki:",
 ]
+
+# Jmenne prostory MediaWiki (Wikipedie apod.), ktere nejsou clanky, ale
+# admin/meta stranky. Porovnava se cast URL pred ":" v poslednim useku
+# cesty, po Unicode-normalizaci (kvuli ruznym zapisum diakritiky) a
+# prevodu na mala pismena - takze je jedno, jak presne je "á" zakodovane.
+NEZAJIMAVE_JMENNE_PROSTORY = {
+    "special", "specialni",
+    "help", "napoveda",
+    "talk", "diskuse",
+    "category", "kategorie",
+    "portal",
+    "file", "soubor",
+    "template", "sablona",
+    "module", "modul",
+    "mediawiki",
+    "user", "uzivatel", "uzivatelka",
+    "wikipedia", "wikipedie",
+}
+
+
+def odstran_diakritiku(text: str) -> str:
+    text = unicodedata.normalize("NFKD", text)
+    return "".join(znak for znak in text if not unicodedata.combining(znak))
 
 
 def normalizuj(url: str) -> str:
@@ -61,12 +76,19 @@ def je_zajimava(url: str) -> bool:
         return False
     if rozparsovano.netloc not in POVOLENE_DOMENY:
         return False
-    # Porovnavame dekodovanou verzi, protoze odkazy na wiki byvaji
-    # URL-encodovane (napr. "Speci%C3%A1ln%C3%AD:" misto "Speciální:")
+
     dekodovana_url = unquote(url)
     for vzor in VYLOUCENE_VZORY:
         if vzor in url or vzor in dekodovana_url:
             return False
+
+    # Posledni usek cesty, napr. "/wiki/Portál:Doprava" -> "Portál:Doprava"
+    posledni_usek = unquote(rozparsovano.path).rsplit("/", 1)[-1]
+    if ":" in posledni_usek:
+        jmenny_prostor = odstran_diakritiku(posledni_usek.split(":", 1)[0]).strip().lower()
+        if jmenny_prostor in NEZAJIMAVE_JMENNE_PROSTORY:
+            return False
+
     return True
 
 
