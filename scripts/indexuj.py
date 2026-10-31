@@ -5,9 +5,10 @@ stahne je, vytahne titulek + kratky text a ulozi do api/pages.jsonl.
 Ten pak cte vyhledavac v api/main.py.
 """
 import json
+import re
 import time
 from pathlib import Path
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlunparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -26,20 +27,60 @@ TIMEOUT = 8         # vterin na jeden pozadavek
 VYSTUPNI_SOUBOR = Path(__file__).resolve().parent.parent / "api" / "pages.jsonl"
 HEADERS = {"User-Agent": "CzechiaSearchBot/1.0"}
 
+# Crawler se nesmi vzdalit mimo domeny, odkud zacal (jinak za chvili
+# konci na stovkach jazykovych mutaci Wikipedie atd.)
+POVOLENE_DOMENY = {urlparse(u).netloc for u in SEED_URLS}
+
+# Kousky URL, ktere znamenaji "neni to clanek, je to admin/meta stranka"
+# (editace, historie, specialni stranky, prihlaseni, kategorie...)
+VYLOUCENE_VZORY = [
+    "action=edit", "action=history", "action=info", "redlink=1",
+    "oldid=", "UploadWizard", "DownloadAsPdf", "useparsoid=",
+    "/w/index.php",
+    "Special:", "Speciální:", "Speciáln%C3%AD:",
+    "Help:", "Nápověda:", "N%C3%A1pov%C4%9Bda:",
+    "Talk:", "Diskuse:",
+    "Category:", "Kategorie:",
+    "Portal:", "Portál:", "Port%C3%A1l:",
+    "File:", "Soubor:",
+    "Template:", "Šablona:",
+    "Module:", "Modul:",
+    "MediaWiki:",
+]
+
+
+def normalizuj(url: str) -> str:
+    """Odstrani #fragment, aby stejna stranka s ruznou kotvou nebyla brana jako dve ruzne."""
+    rozparsovano = urlparse(url)
+    return urlunparse(rozparsovano._replace(fragment=""))
+
+
+def je_zajimava(url: str) -> bool:
+    rozparsovano = urlparse(url)
+    if rozparsovano.scheme not in ("http", "https"):
+        return False
+    if rozparsovano.netloc not in POVOLENE_DOMENY:
+        return False
+    for vzor in VYLOUCENE_VZORY:
+        if vzor in url:
+            return False
+    return True
+
 
 def ziskej_text(soup: BeautifulSoup) -> str:
     meta = soup.find("meta", attrs={"name": "description"})
     if meta and meta.get("content"):
-        return meta["content"].strip()[:300]
-    p = soup.find("p")
-    if p:
-        return p.get_text(strip=True)[:300]
-    return ""
+        text = meta["content"]
+    else:
+        p = soup.find("p")
+        text = p.get_text(separator=" ", strip=True) if p else ""
+    text = re.sub(r"\s+", " ", text).strip()
+    return text[:300]
 
 
 def crawluj():
     navstiveno = set()
-    fronta = [(url, 0) for url in SEED_URLS]
+    fronta = [(normalizuj(url), 0) for url in SEED_URLS]
     vysledky = []
 
     while fronta and len(vysledky) < MAX_STRANEK:
@@ -63,8 +104,8 @@ def crawluj():
 
         if hloubka < MAX_HLOUBKA:
             for a in soup.find_all("a", href=True):
-                odkaz = urljoin(url, a["href"])
-                if urlparse(odkaz).scheme in ("http", "https") and odkaz not in navstiveno:
+                odkaz = normalizuj(urljoin(url, a["href"]))
+                if je_zajimava(odkaz) and odkaz not in navstiveno:
                     fronta.append((odkaz, hloubka + 1))
 
         time.sleep(0.5)  # slusnost k serverum
