@@ -8,7 +8,7 @@ import json
 import re
 import time
 from pathlib import Path
-from urllib.parse import urljoin, urlparse, urlunparse
+from urllib.parse import unquote, urljoin, urlparse, urlunparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -61,8 +61,11 @@ def je_zajimava(url: str) -> bool:
         return False
     if rozparsovano.netloc not in POVOLENE_DOMENY:
         return False
+    # Porovnavame dekodovanou verzi, protoze odkazy na wiki byvaji
+    # URL-encodovane (napr. "Speci%C3%A1ln%C3%AD:" misto "Speciální:")
+    dekodovana_url = unquote(url)
     for vzor in VYLOUCENE_VZORY:
-        if vzor in url:
+        if vzor in url or vzor in dekodovana_url:
             return False
     return True
 
@@ -95,12 +98,22 @@ def crawluj():
         except requests.RequestException:
             continue
 
+        # Pokud stranka presmerovala (napr. "Nahodna stranka" -> konkretni
+        # clanek), ulozime URL konecneho clanku, ne URL presmerovani.
+        konecna_url = normalizuj(resp.url)
+        if konecna_url in navstiveno and konecna_url != url:
+            continue
+        navstiveno.add(konecna_url)
+
+        if not je_zajimava(konecna_url):
+            continue
+
         soup = BeautifulSoup(resp.text, "html.parser")
-        titulek = soup.title.string.strip() if soup.title and soup.title.string else url
+        titulek = soup.title.string.strip() if soup.title and soup.title.string else konecna_url
         text = ziskej_text(soup)
 
-        vysledky.append({"title": titulek, "url": url, "text": text})
-        print(f"[{len(vysledky)}] {url}")
+        vysledky.append({"title": titulek, "url": konecna_url, "text": text})
+        print(f"[{len(vysledky)}] {konecna_url}")
 
         if hloubka < MAX_HLOUBKA:
             for a in soup.find_all("a", href=True):
