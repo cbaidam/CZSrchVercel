@@ -16,7 +16,8 @@ from bs4 import BeautifulSoup
 
 # Odkud se zacina crawlovat - klidne si doplň vlastni stranky.
 SEED_URLS = [
-    "https://cs.wikipedia.org/wiki/Hlavn%C3%AD_strana",
+    "https://wikipedia.org",
+    "https"//en.wikipedia.org",
     "https://www.google.com/",
     "https://www.youtube.com/",
     "https"//www.microsoft.com",
