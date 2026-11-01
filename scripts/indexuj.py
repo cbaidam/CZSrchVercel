@@ -17,12 +17,14 @@ from bs4 import BeautifulSoup
 # Odkud se zacina crawlovat - klidne si doplň vlastni stranky.
 SEED_URLS = [
     "https://cs.wikipedia.org/wiki/Hlavn%C3%AD_strana",
-    "https://www.root.cz/",
-    "https://www.python.org/",
+    "https://www.google.com/",
+    "https://www.youtube.com/",
+    "https"//www.microsoft.com",
+    "https://www.nintendo.com",
 ]
 
-MAX_STRANEK = 300   # kolik stranek max naindexovat (at to nebezi vecne)
-MAX_HLOUBKA = 2     # kolik "kliknuti" od seedu se crawler smi vzdalit
+MAX_STRANEK = 1000   # kolik stranek max naindexovat (at to nebezi vecne)
+MAX_HLOUBKA = 3     # kolik "kliknuti" od seedu se crawler smi vzdalit
 TIMEOUT = 8         # vterin na jeden pozadavek
 
 VYSTUPNI_SOUBOR = Path(__file__).resolve().parent.parent / "api" / "pages.jsonl"
